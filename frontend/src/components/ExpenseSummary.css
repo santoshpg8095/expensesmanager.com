@@ -1,0 +1,65 @@
+.expense-summary-container {
+  width: 100%;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.summary-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  text-align: center;
+}
+
+.summary-card h3 {
+  margin-bottom: 10px;
+  color: #3a0ca3;
+  font-size: 18px;
+}
+
+.summary-card .amount {
+  font-size: 28px;
+  font-weight: 700;
+  color: #f72585;
+}
+
+.summary-card .category {
+  font-size: 20px;
+  font-weight: 600;
+  color: #4361ee;
+}
+
+.charts-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.chart-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+.chart-card h3 {
+  margin-bottom: 20px;
+  color: #3a0ca3;
+  text-align: center;
+}
+
+.chart-wrapper {
+  height: 300px;
+}
+
+@media (max-width: 768px) {
+  .charts-container {
+    grid-template-columns: 1fr;
+  }
+}
