@@ -4,30 +4,30 @@ const JwtStrategy = require('passport-jwt').Strategy;
 const ExtractJwt = require('passport-jwt').ExtractJwt;
 const User = require('../models/User');
 
-// Debug: Check if environment variables are loaded
-console.log('Passport Config: Google Client ID:', process.env.GOOGLE_CLIENT_ID ? 'Loaded' : 'Missing');
-console.log('Passport Config: Google Client Secret:', process.env.GOOGLE_CLIENT_SECRET ? 'Loaded' : 'Missing');
+// Force HTTPS callback URL for production
+const getCallbackURL = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://expensesmanager-com.onrender.com/api/auth/google/callback';
+  }
+  return 'http://localhost:5000/api/auth/google/callback';
+};
 
-// Validate required environment variables
-if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-  console.error('❌ Missing Google OAuth environment variables!');
-  console.error('Please check your .env file and ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set.');
-} else {
-  console.log('✅ Google OAuth environment variables are configured');
-}
+const callbackURL = getCallbackURL();
+
+console.log('🔐 Passport Configuration:');
+console.log('   Environment:', process.env.NODE_ENV || 'development');
+console.log('   Callback URL:', callbackURL);
+console.log('   Google Client ID:', process.env.GOOGLE_CLIENT_ID ? 'Loaded' : 'Missing');
 
 // Google OAuth Strategy
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: "/api/auth/google/callback"
+  callbackURL: callbackURL,
+  proxy: true
 }, async (accessToken, refreshToken, profile, done) => {
   try {
-    console.log('🔐 Google OAuth Profile Received:', {
-      id: profile.id,
-      email: profile.emails[0].value,
-      name: profile.displayName
-    });
+    console.log('🔐 Google OAuth Profile Received:', profile.id);
 
     // Check if user already exists with this googleId
     let user = await User.findOne({ googleId: profile.id });
@@ -42,11 +42,10 @@ passport.use(new GoogleStrategy({
     
     if (user) {
       console.log('🔄 Linking Google account to existing user:', user.email);
-      // Link Google account to existing user
       user.googleId = profile.id;
       user.authMethod = 'google';
       user.avatar = profile.photos[0].value;
-      user.isVerified = true; // Google emails are verified
+      user.isVerified = true;
       await user.save();
     } else {
       // Create new user
@@ -57,7 +56,7 @@ passport.use(new GoogleStrategy({
         email: profile.emails[0].value,
         avatar: profile.photos[0].value,
         authMethod: 'google',
-        isVerified: true // Google emails are verified
+        isVerified: true
       });
     }
     
@@ -69,7 +68,7 @@ passport.use(new GoogleStrategy({
   }
 }));
 
-// JWT Strategy for protecting routes
+// JWT Strategy
 passport.use(new JwtStrategy({
   jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
   secretOrKey: process.env.JWT_SECRET
@@ -81,26 +80,8 @@ passport.use(new JwtStrategy({
     }
     return done(null, false);
   } catch (error) {
-    console.error('❌ JWT Strategy error:', error);
     return done(error, false);
   }
 }));
-
-// Serialize user (not used for JWT but required by Passport)
-passport.serializeUser((user, done) => {
-  done(null, user.id);
-});
-
-// Deserialize user (not used for JWT but required by Passport)
-passport.deserializeUser(async (id, done) => {
-  try {
-    const user = await User.findById(id);
-    done(null, user);
-  } catch (error) {
-    done(error, null);
-  }
-});
-
-console.log('✅ Passport strategies configured successfully');
 
 module.exports = passport;
