@@ -12,6 +12,8 @@ const transporter = nodemailer.createTransport({
 const sendEmail = async (to, subject, html, text = '') => {
   try {
     console.log(`📧 Attempting to send email to: ${to}`);
+    console.log(`📧 Gmail User: ${process.env.GMAIL_USER}`);
+    console.log(`📧 App Password configured: ${process.env.GMAIL_APP_PASSWORD ? 'Yes' : 'No'}`);
     
     const mailOptions = {
       from: `"Expense Manager" <${process.env.GMAIL_USER}>`,
@@ -20,6 +22,12 @@ const sendEmail = async (to, subject, html, text = '') => {
       html: html,
       text: text || subject.replace(/<[^>]*>/g, ''),
     };
+
+    console.log('📧 Mail options:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject
+    });
 
     const result = await transporter.sendMail(mailOptions);
     console.log('✅ Email sent successfully via Gmail');
@@ -32,10 +40,20 @@ const sendEmail = async (to, subject, html, text = '') => {
     };
     
   } catch (error) {
-    console.error('❌ Gmail error:', error.message);
+    console.error('❌ Gmail error details:', {
+      code: error.code,
+      message: error.message,
+      command: error.command,
+      responseCode: error.responseCode,
+      response: error.response
+    });
     
     if (error.code === 'EAUTH') {
-      throw new Error('Gmail authentication failed. Check your App Password.');
+      throw new Error('Gmail authentication failed. Check your App Password or enable 2-Step Verification.');
+    }
+    
+    if (error.code === 'ECONNECTION') {
+      throw new Error('Connection failed. Check your internet connection or Gmail service.');
     }
     
     throw new Error(`Gmail service error: ${error.message}`);

@@ -174,60 +174,28 @@ exports.sendOTP = async (req, res) => {
 
     console.log('🔐 OTP generated for user:', email, otp);
 
-    // Email template for OTP
-    const message = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-          <h1 style="margin: 0; font-size: 28px; font-weight: bold;">Expense Manager</h1>
-          <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Smart Expense Tracking</p>
-        </div>
-        
-        <div style="padding: 30px; background: #f8f9fa;">
-          <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
-          
-          <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
-            Hello <strong>${user.name}</strong>,
-          </p>
-          
-          <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            You have requested to reset your password. Use the OTP below to verify your identity:
-          </p>
-          
-          <div style="background: #fff; padding: 20px; border-radius: 10px; text-align: center; border: 2px dashed #667eea; margin: 20px 0;">
-            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; margin: 10px 0;">
-              ${otp}
-            </div>
-            <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-              This OTP is valid for 10 minutes
-            </p>
-          </div>
-          
-          <p style="color: #999; font-size: 14px; text-align: center; margin-top: 25px;">
-            If you didn't request this, please ignore this email.
-          </p>
-        </div>
-        
-        <div style="background: #2d3748; padding: 20px; text-align: center; color: #a0aec0;">
-          <p style="margin: 0; font-size: 14px;">
-            &copy; 2024 Expense Manager Team. All rights reserved.
-          </p>
-          <p style="margin: 5px 0 0 0; font-size: 12px;">
-            Smart expense tracking made simple
-          </p>
-        </div>
-      </div>
-    `;
+    // Simple text email message
+    const message = `Hello ${user.name},
+
+Your OTP for password reset is: ${otp}
+
+This OTP is valid for 10 minutes.
+
+If you didn't request this, please ignore this email.
+
+Regards,
+Expense Manager Team`;
 
     try {
       // Send email via Gmail
-      await sendEmail(
+      const emailResult = await sendEmail(
         user.email,
         'Password Reset OTP - Expense Manager',
         message,
-        `Your OTP for password reset is: ${otp}. This OTP is valid for 10 minutes.`
+        message
       );
 
-      console.log('✅ OTP email sent successfully to:', email);
+      console.log('✅ Email sent successfully to:', email);
 
       return res.status(200).json({
         success: true,
@@ -240,7 +208,8 @@ exports.sendOTP = async (req, res) => {
       
       return res.status(500).json({
         success: false,
-        message: 'Failed to send OTP. Please try again later.'
+        message: 'Failed to send OTP email. Please try again later.',
+        error: emailError.message
       });
     }
 
@@ -338,55 +307,15 @@ exports.resetPassword = async (req, res) => {
 
     console.log('✅ Password reset successfully for:', user.email);
 
-    // Confirmation email template
-    const message = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center; color: white;">
-          <h1 style="margin: 0; font-size: 28px; font-weight: bold;">Expense Manager</h1>
-          <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Smart Expense Tracking</p>
-        </div>
-        
-        <div style="padding: 30px; background: #f8f9fa;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <div style="background: #10b981; color: white; width: 60px; height: 60px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 24px;">
-              ✓
-            </div>
-          </div>
-          
-          <h2 style="color: #333; text-align: center; margin-bottom: 20px;">Password Updated Successfully</h2>
-          
-          <p style="color: #666; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-            Hello <strong>${user.name}</strong>,
-          </p>
-          
-          <p style="color: #666; line-height: 1.6; margin-bottom: 25px; text-align: center;">
-            Your password has been updated successfully.
-          </p>
-          
-          <div style="background: #fff; padding: 20px; border-radius: 10px; text-align: center; border-left: 4px solid #10b981; margin: 20px 0;">
-            <p style="color: #666; margin: 0;">
-              <strong>Account:</strong> ${user.email}<br>
-              <strong>Time:</strong> ${new Date().toLocaleString()}
-            </p>
-          </div>
-          
-          <div style="background: #fef3cd; border: 1px solid #fde68a; padding: 15px; border-radius: 8px; margin-top: 25px;">
-            <p style="color: #92400e; margin: 0; font-size: 14px; text-align: center;">
-              ⚠️ If you didn't make this change, please contact us immediately.
-            </p>
-          </div>
-        </div>
-        
-        <div style="background: #2d3748; padding: 20px; text-align: center; color: #a0aec0;">
-          <p style="margin: 0; font-size: 14px;">
-            &copy; 2024 Expense Manager Team. All rights reserved.
-          </p>
-          <p style="margin: 5px 0 0 0; font-size: 12px;">
-            Smart expense tracking made simple
-          </p>
-        </div>
-      </div>
-    `;
+    // Confirmation email message
+    const message = `Hello ${user.name},
+
+Your password has been updated successfully.
+
+If you didn't make this change, please contact us immediately.
+
+Regards,
+Expense Manager Team`;
 
     try {
       // Send confirmation email
@@ -394,7 +323,7 @@ exports.resetPassword = async (req, res) => {
         user.email,
         'Password Updated Successfully - Expense Manager',
         message,
-        `Your password has been updated successfully. If you didn't make this change, please contact us immediately.`
+        message
       );
       
       console.log('✅ Confirmation email sent to:', user.email);

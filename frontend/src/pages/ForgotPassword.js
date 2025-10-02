@@ -28,6 +28,8 @@ const ForgotPassword = () => {
         
         // Navigate to OTP verification page with email
         navigate('/verify-otp', { state: { email } });
+      } else {
+        toast.error(res.data.message || 'Failed to send OTP');
       }
     } catch (error) {
       console.error('Forgot password error:', error);

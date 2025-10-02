@@ -46,28 +46,23 @@ app.use('/api/expenses', require('./routes/expenseRoutes'));
 // Basic route for testing
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'Expense Tracker API is running',
+    message: 'Welcome to the Expense Tracker API',
     environment: process.env.NODE_ENV || 'development',
     clientUrl: process.env.CLIENT_URL,
     protocol: req.protocol,
-    secure: req.secure,
     host: req.get('host')
   });
 });
 
-// OAuth configuration debug endpoint
-app.get('/api/debug-oauth', (req, res) => {
-  res.json({
-    environment: process.env.NODE_ENV,
-    googleClientId: process.env.GOOGLE_CLIENT_ID ? 'Configured' : 'Missing',
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  const mongoose = require('mongoose');
+  res.json({ 
+    status: 'OK',
+    environment: process.env.NODE_ENV || 'development',
+    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
     clientUrl: process.env.CLIENT_URL,
-    requestProtocol: req.protocol,
-    requestSecure: req.secure,
-    requestHost: req.get('host'),
-    requestHeaders: {
-      'x-forwarded-proto': req.headers['x-forwarded-proto'],
-      'x-forwarded-host': req.headers['x-forwarded-host']
-    }
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -77,4 +72,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
   console.log(`🌐 Client URL: ${process.env.CLIENT_URL}`);
   console.log(`🔐 Google OAuth: ${process.env.GOOGLE_CLIENT_ID ? 'Configured' : 'Not configured'}`);
+  console.log(`📧 Gmail: ${process.env.GMAIL_USER ? 'Configured' : 'Not configured'}`);
 });
