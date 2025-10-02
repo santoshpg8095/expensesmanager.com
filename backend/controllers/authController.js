@@ -2,7 +2,8 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const passport = require('passport');
-const { sendEmail } = require('../config/emailService');
+const { google } = require('googleapis');
+const nodemailer = require('nodemailer');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -15,6 +16,157 @@ const generateToken = (id) => {
 const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
+
+// Gmail OAuth2 Service
+class GmailService {
+  constructor() {
+    this.oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_GMAIL_CLIENT_ID,
+      process.env.GOOGLE_GMAIL_CLIENT_SECRET,
+      process.env.NODE_ENV === 'production' 
+        ? 'https://expensesmanager-com.onrender.com/api/auth/gmail/callback'
+        : 'http://localhost:5000/api/auth/gmail/callback'
+    );
+
+    // Set refresh token if available
+    if (process.env.GOOGLE_GMAIL_REFRESH_TOKEN) {
+      this.oauth2Client.setCredentials({
+        refresh_token: process.env.GOOGLE_GMAIL_REFRESH_TOKEN
+      });
+    }
+
+    this.transporter = null;
+    this.initializeTransporter();
+  }
+
+  async initializeTransporter() {
+    try {
+      if (!process.env.GOOGLE_GMAIL_REFRESH_TOKEN) {
+        console.warn('⚠️ Gmail refresh token not configured. Emails will not be sent.');
+        return;
+      }
+
+      // Get access token
+      const { token } = await this.oauth2Client.getAccessToken();
+      
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          type: 'OAuth2',
+          user: process.env.GMAIL_USER || 'santoshpgblr91@gmail.com',
+          clientId: process.env.GOOGLE_GMAIL_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_GMAIL_CLIENT_SECRET,
+          refreshToken: process.env.GOOGLE_GMAIL_REFRESH_TOKEN,
+          accessToken: token,
+        },
+      });
+
+      console.log('✅ Gmail OAuth2 transporter initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize Gmail transporter:', error.message);
+    }
+  }
+
+  async sendEmail(to, subject, html, text = '') {
+    // If Gmail OAuth2 is not configured, use fallback to console
+    if (!this.transporter || !process.env.GOOGLE_GMAIL_REFRESH_TOKEN) {
+      console.log('📧 Gmail not configured - falling back to console OTP');
+      const otpMatch = html.match(/>(\d{6})</);
+      const otp = otpMatch ? otpMatch[1] : 'N/A';
+      
+      console.log('📧 CONSOLE EMAIL (Gmail not configured):');
+      console.log('   To:', to);
+      console.log('   Subject:', subject);
+      console.log('   OTP:', otp);
+      
+      return { 
+        success: true, 
+        service: 'console',
+        otp: otp 
+      };
+    }
+
+    try {
+      console.log(`📧 Attempting to send email to: ${to}`);
+      console.log(`📧 Subject: ${subject}`);
+
+      const mailOptions = {
+        from: `"Expense Manager" <${process.env.GMAIL_USER || 'santoshpgblr91@gmail.com'}>`,
+        to: to,
+        subject: subject,
+        html: html,
+        text: text || subject.replace(/<[^>]*>/g, ''),
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log('✅ Email sent successfully via Gmail OAuth2');
+      console.log('✅ Message ID:', result.messageId);
+      
+      return { 
+        success: true, 
+        service: 'gmail-oauth2',
+        messageId: result.messageId 
+      };
+      
+    } catch (error) {
+      console.error('❌ Gmail OAuth2 error:', error.message);
+      
+      // If token is expired, try to refresh it
+      if (error.code === 'EAUTH' && error.command === 'AUTH') {
+        console.log('🔄 Access token expired, attempting to refresh...');
+        try {
+          await this.initializeTransporter();
+          // Retry sending email
+          return await this.sendEmail(to, subject, html, text);
+        } catch (refreshError) {
+          console.error('❌ Failed to refresh token:', refreshError.message);
+        }
+      }
+      
+      // Fallback to console if Gmail fails
+      console.log('📧 Gmail failed - falling back to console OTP');
+      const otpMatch = html.match(/>(\d{6})</);
+      const otp = otpMatch ? otpMatch[1] : 'N/A';
+      
+      console.log('📧 CONSOLE EMAIL (Gmail failed):');
+      console.log('   To:', to);
+      console.log('   Subject:', subject);
+      console.log('   OTP:', otp);
+      
+      return { 
+        success: true, 
+        service: 'console-fallback',
+        otp: otp 
+      };
+    }
+  }
+
+  getAuthUrl() {
+    const scopes = [
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ];
+
+    return this.oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      prompt: 'consent'
+    });
+  }
+
+  async getTokensFromCode(code) {
+    try {
+      const { tokens } = await this.oauth2Client.getToken(code);
+      return tokens;
+    } catch (error) {
+      console.error('❌ Error getting tokens:', error);
+      throw error;
+    }
+  }
+}
+
+// Initialize Gmail Service
+const gmailService = new GmailService();
 
 // Register user
 exports.register = async (req, res) => {
@@ -132,6 +284,78 @@ exports.googleCallback = (req, res, next) => {
   })(req, res, next);
 };
 
+// Gmail OAuth authentication
+exports.gmailAuth = (req, res) => {
+  try {
+    const authUrl = gmailService.getAuthUrl();
+    console.log('🔐 Redirecting to Gmail OAuth:', authUrl);
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('❌ Gmail auth error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gmail authentication failed'
+    });
+  }
+};
+
+// Gmail OAuth callback
+exports.gmailCallback = async (req, res) => {
+  try {
+    const { code } = req.query;
+    
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Authorization code missing'
+      });
+    }
+
+    const tokens = await gmailService.getTokensFromCode(code);
+    
+    console.log('✅ Gmail OAuth successful. Refresh token received.');
+    console.log('🔐 Refresh token:', tokens.refresh_token);
+    
+    // Show the refresh token to add to environment variables
+    res.send(`
+      <html>
+        <head>
+          <title>Gmail OAuth Success</title>
+          <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+            .success { background: #d4edda; color: #155724; padding: 20px; border-radius: 8px; }
+            .token-box { background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 4px; font-family: monospace; margin: 15px 0; }
+            .info { background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 8px; margin: 15px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="success">
+            <h2>🎉 Gmail OAuth Successful!</h2>
+            <p>Add this refresh token to your Render.com environment variables:</p>
+          </div>
+          
+          <div class="token-box">${tokens.refresh_token}</div>
+          
+          <div class="info">
+            <p><strong>Environment variable name:</strong> GOOGLE_GMAIL_REFRESH_TOKEN</p>
+            <p><strong>Value:</strong> Copy the token above</p>
+          </div>
+          
+          <p>After adding the token, restart your server and test the forgot password flow.</p>
+          <p><a href="${process.env.CLIENT_URL}">Return to App</a></p>
+        </body>
+      </html>
+    `);
+    
+  } catch (error) {
+    console.error('❌ Gmail callback error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gmail authentication failed'
+    });
+  }
+};
+
 // Send OTP for password reset
 exports.sendOTP = async (req, res) => {
   try {
@@ -174,86 +398,94 @@ exports.sendOTP = async (req, res) => {
 
     console.log('🔐 OTP generated for user:', email, otp);
 
-    // Try to send email via Resend (only for verified email)
-    let emailSent = false;
-    let emailError = null;
-
-    // Only attempt to send email if it's the verified Resend email
-    if (email === 'santoshpgblr91@gmail.com') {
-      try {
-        const message = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-              <h1 style="margin: 0; font-size: 28px; font-weight: bold;">Expense Manager</h1>
-              <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Smart Expense Tracking</p>
+    // Email template for OTP
+    const message = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
+          <h1 style="margin: 0; font-size: 28px; font-weight: bold;">Expense Manager</h1>
+          <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Smart Expense Tracking</p>
+        </div>
+        
+        <div style="padding: 30px; background: #f8f9fa;">
+          <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
+          
+          <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+            Hello <strong>${user.name}</strong>,
+          </p>
+          
+          <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
+            You have requested to reset your password. Use the OTP below to verify your identity:
+          </p>
+          
+          <div style="background: #fff; padding: 20px; border-radius: 10px; text-align: center; border: 2px dashed #667eea; margin: 20px 0;">
+            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; margin: 10px 0;">
+              ${otp}
             </div>
-            
-            <div style="padding: 30px; background: #f8f9fa;">
-              <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
-              
-              <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
-                Hello <strong>${user.name}</strong>,
-              </p>
-              
-              <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-                You have requested to reset your password. Use the OTP below to verify your identity:
-              </p>
-              
-              <div style="background: #fff; padding: 20px; border-radius: 10px; text-align: center; border: 2px dashed #667eea; margin: 20px 0;">
-                <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; margin: 10px 0;">
-                  ${otp}
-                </div>
-                <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-                  This OTP is valid for 10 minutes
-                </p>
-              </div>
-              
-              <p style="color: #999; font-size: 14px; text-align: center; margin-top: 25px;">
-                If you didn't request this, please ignore this email.
-              </p>
-            </div>
-            
-            <div style="background: #2d3748; padding: 20px; text-align: center; color: #a0aec0;">
-              <p style="margin: 0; font-size: 14px;">
-                &copy; 2024 Expense Manager Team. All rights reserved.
-              </p>
-              <p style="margin: 5px 0 0 0; font-size: 12px;">
-                Smart expense tracking made simple
-              </p>
-            </div>
+            <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
+              This OTP is valid for 10 minutes
+            </p>
           </div>
-        `;
+          
+          <p style="color: #999; font-size: 14px; text-align: center; margin-top: 25px;">
+            If you didn't request this, please ignore this email.
+          </p>
+        </div>
+        
+        <div style="background: #2d3748; padding: 20px; text-align: center; color: #a0aec0;">
+          <p style="margin: 0; font-size: 14px;">
+            &copy; 2024 Expense Manager Team. All rights reserved.
+          </p>
+          <p style="margin: 5px 0 0 0; font-size: 12px;">
+            Smart expense tracking made simple
+          </p>
+        </div>
+      </div>
+    `;
 
-        await sendEmail(
-          user.email,
-          'Password Reset OTP - Expense Manager',
-          message,
-          `Your OTP for password reset is: ${otp}. This OTP is valid for 10 minutes.`
-        );
+    try {
+      // Send email via Gmail OAuth2 (with fallback to console)
+      const emailResult = await gmailService.sendEmail(
+        user.email,
+        'Password Reset OTP - Expense Manager',
+        message,
+        `Your OTP for password reset is: ${otp}. This OTP is valid for 10 minutes.`
+      );
 
-        emailSent = true;
-        console.log('✅ OTP email sent successfully to:', email);
+      console.log('✅ Email sending result:', emailResult.service);
 
-      } catch (error) {
-        emailError = error.message;
-        console.error('❌ Email sending failed:', emailError);
+      // Prepare response based on email service used
+      let responseMessage = 'OTP sent to your email successfully';
+      let showOtp = false;
+      
+      if (emailResult.service.includes('console')) {
+        responseMessage = 'OTP generated (email service unavailable)';
+        showOtp = true;
       }
-    } else {
-      console.log('📧 Email not sent - recipient not verified with Resend');
-    }
 
-    // Always return OTP in response for testing
-    return res.status(200).json({
-      success: true,
-      message: emailSent 
-        ? 'OTP sent to your email successfully' 
-        : 'OTP generated successfully (development mode)',
-      email: user.email,
-      otp: otp, // Always return OTP for testing
-      expiresAt: new Date(otpExpire).toISOString(),
-      emailSent: emailSent,
-      note: emailSent ? undefined : 'Use this OTP for testing. In production, this would be sent via email.'
-    });
+      return res.status(200).json({
+        success: true,
+        message: responseMessage,
+        email: user.email,
+        ...(showOtp && { 
+          otp: otp,
+          expiresAt: new Date(otpExpire).toISOString(),
+          note: 'Use this OTP for testing. Email service: ' + emailResult.service
+        })
+      });
+
+    } catch (emailError) {
+      console.error('❌ Email sending error:', emailError.message);
+      
+      // Fallback: Always return OTP in response
+      return res.status(200).json({
+        success: true,
+        message: 'OTP generated (email service failed)',
+        email: user.email,
+        otp: otp,
+        expiresAt: new Date(otpExpire).toISOString(),
+        note: 'Use this OTP for testing. Email error: ' + emailError.message
+      });
+    }
 
   } catch (error) {
     console.error('❌ Send OTP error:', error);
@@ -400,8 +632,8 @@ exports.resetPassword = async (req, res) => {
     `;
 
     try {
-      // Send confirmation email
-      await sendEmail(
+      // Send confirmation email (optional - don't fail if email fails)
+      await gmailService.sendEmail(
         user.email,
         'Password Updated Successfully - Expense Manager',
         message,
@@ -410,7 +642,7 @@ exports.resetPassword = async (req, res) => {
       
       console.log('✅ Confirmation email sent to:', user.email);
     } catch (emailError) {
-      console.log('⚠️ Confirmation email failed to send:', emailError);
+      console.log('⚠️ Confirmation email failed to send:', emailError.message);
       // Don't fail the reset request if confirmation email fails
     }
 
@@ -498,7 +730,7 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-// Logout user (optional)
+// Logout user
 exports.logout = async (req, res) => {
   try {
     res.status(200).json({
