@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom'; // Added Link import
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import axios from '../utils/api';
 import toast from 'react-hot-toast';
 import './VerifyOTP.css';
 
 const VerifyOTP = () => {
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const inputRefs = useRef([]);
   const navigate = useNavigate();
@@ -93,7 +93,7 @@ const VerifyOTP = () => {
       const res = await axios.post('/auth/forgot-password', { email });
       if (res.data.success) {
         toast.success('New OTP sent to your email!');
-        setOtp(['', '', '', '', '', '']);
+        setOtp(['', '', '', '', '', '', '']);
         inputRefs.current[0].focus();
       }
     } catch (error) {

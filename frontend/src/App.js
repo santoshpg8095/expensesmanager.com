@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ExpenseProvider } from './context/ExpenseContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -85,12 +85,14 @@ function App() {
               <Navbar />
               <main className="flex-grow">
                 <Routes>
+                  {/* Public Routes */}
                   <Route path="/" element={<Landing />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password/:token" element={<ResetPassword />} />
-                  {/* New Public Pages */}
+                  
+                  {/* Information Pages */}
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/security" element={<Security />} />
@@ -99,14 +101,16 @@ function App() {
                   <Route path="/careers" element={<Careers />} />
                   <Route path="/blog" element={<Blog />} />
                   <Route path="/press" element={<Press />} />
-                  <Route path="/verify-otp" element={<VerifyOTP />} />
-                  <Route path="/new-password" element={<NewPassword />} />
                   <Route path="/faq" element={<FAQ />} />
                   <Route path="/community" element={<Community />} />
-                  <Route path="/help" element={<Contact />} /> {/* Redirect help to contact for now */}
-                  <Route path="/faq" element={<Contact />} /> {/* Redirect FAQ to contact for now */}
+                  
+                  {/* Password Reset Routes */}
+                  <Route path="/verify-otp" element={<VerifyOTP />} />
+                  <Route path="/new-password" element={<NewPassword />} />
+                  
                   {/* OAuth Callback Route */}
                   <Route path="/auth/success" element={<OAuthCallback />} />
+                  
                   {/* Protected Routes */}
                   <Route
                     path="/dashboard"
@@ -140,10 +144,13 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+                  
+                  {/* Catch-all Route */}
                   <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
               </main>
             </div>
+            
             {/* Toast Notifications */}
             <Toaster
               position="top-right"
