@@ -207,7 +207,7 @@ Expense Manager Team`;
       console.error('❌ Email sending error:', emailError.message);
       console.error('❌ Full error:', emailError);
       
-      // Fallback: Return OTP in response if email fails
+      // Fallback: Always return OTP in response for testing
       console.log('🛠️ Email failed - returning OTP in response for testing');
       return res.status(200).json({
         success: true,
@@ -227,6 +227,7 @@ Expense Manager Team`;
     });
   }
 };
+
 // Verify OTP
 exports.verifyOTP = async (req, res) => {
   try {
