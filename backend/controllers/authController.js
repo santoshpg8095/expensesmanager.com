@@ -205,17 +205,11 @@ Expense Manager Team`;
 
     } catch (emailError) {
       console.error('❌ Email sending error:', emailError.message);
-      console.error('❌ Full error:', emailError);
       
-      // Fallback: Always return OTP in response for testing
-      console.log('🛠️ Email failed - returning OTP in response for testing');
-      return res.status(200).json({
-        success: true,
-        message: 'OTP generated (email service unavailable)',
-        email: user.email,
-        otp: otp,
-        expiresAt: new Date(otpExpire).toISOString(),
-        note: 'Use this OTP for testing. Email error: ' + emailError.message
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send OTP email. Please try again later.',
+        error: emailError.message
       });
     }
 

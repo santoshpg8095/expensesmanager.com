@@ -1,75 +1,18 @@
 const nodemailer = require('nodemailer');
 
-// Multiple transporter configurations for better reliability
-const createTransporter = () => {
-  // Try different configurations
-  const configs = [
-    // Configuration 1: Standard Gmail with explicit settings
-    {
-      service: 'gmail',
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000
-    },
-    // Configuration 2: Alternative port
-    {
-      service: 'gmail',
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 5000,
-      socketTimeout: 10000
-    },
-    // Configuration 3: Direct SMTP
-    {
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000
-    }
-  ];
-
-  return configs;
-};
-
-let currentConfigIndex = 0;
-let transporter = null;
-
-const initializeTransporter = () => {
-  const configs = createTransporter();
-  transporter = nodemailer.createTransporter(configs[currentConfigIndex]);
-  console.log(`📧 Using Gmail configuration ${currentConfigIndex + 1}`);
-};
-
-// Initialize with first configuration
-initializeTransporter();
+// Simple Gmail service using App Password
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD, // 16-character App Password
+  },
+  port: 587,
+  secure: false, // Use TLS
+  tls: {
+    rejectUnauthorized: false
+  }
+});
 
 const sendEmail = async (to, subject, html, text = '') => {
   try {
@@ -92,10 +35,23 @@ const sendEmail = async (to, subject, html, text = '') => {
       subject: mailOptions.subject
     });
 
-    // Try to send email
+    // Test the transporter first
+    await new Promise((resolve, reject) => {
+      transporter.verify((error, success) => {
+        if (error) {
+          console.error('❌ Transporter verification failed:', error);
+          reject(error);
+        } else {
+          console.log('✅ Transporter verified successfully');
+          resolve(success);
+        }
+      });
+    });
+
     const result = await transporter.sendMail(mailOptions);
     console.log('✅ Email sent successfully via Gmail');
     console.log('✅ Message ID:', result.messageId);
+    console.log('✅ Response:', result.response);
     
     return { 
       success: true, 
@@ -104,38 +60,24 @@ const sendEmail = async (to, subject, html, text = '') => {
     };
     
   } catch (error) {
-    console.error(`❌ Gmail error with config ${currentConfigIndex + 1}:`, error.message);
+    console.error('❌ Gmail error details:', {
+      code: error.code,
+      message: error.message,
+      command: error.command,
+      responseCode: error.responseCode,
+      response: error.response
+    });
     
-    // Try next configuration if available
-    const configs = createTransporter();
-    if (currentConfigIndex < configs.length - 1) {
-      console.log(`🔄 Trying next configuration...`);
-      currentConfigIndex++;
-      initializeTransporter();
-      
-      try {
-        return await sendEmail(to, subject, html, text);
-      } catch (retryError) {
-        console.error(`❌ All configurations failed. Last error:`, retryError.message);
-        throw new Error(`All Gmail configurations failed: ${retryError.message}`);
-      }
-    }
-    
-    // Handle specific errors
     if (error.code === 'EAUTH') {
       throw new Error('Gmail authentication failed. Check your App Password or enable 2-Step Verification.');
     }
     
     if (error.code === 'ECONNECTION') {
-      throw new Error('Connection failed. Gmail may be blocking the connection. Try using a different email service.');
+      throw new Error('Connection failed. Check your internet connection or Gmail service.');
     }
     
     if (error.code === 'ESOCKET') {
       throw new Error('Socket connection failed. Network issue or Gmail blocked.');
-    }
-    
-    if (error.code === 'ETIMEDOUT') {
-      throw new Error('Connection timeout. Gmail service may be temporarily unavailable.');
     }
     
     throw new Error(`Gmail service error: ${error.message}`);
@@ -151,7 +93,6 @@ const initializeGmail = async () => {
       throw new Error('GMAIL_USER or GMAIL_APP_PASSWORD not configured');
     }
 
-    // Test the transporter
     await new Promise((resolve, reject) => {
       transporter.verify((error, success) => {
         if (error) {
