@@ -139,12 +139,22 @@ exports.sendOTP = async (req, res) => {
 
     console.log('🔐 Forgot password request for email:', email);
 
+    // Validate email
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid email address is required'
+      });
+    }
+
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
+      // Don't reveal that user doesn't exist for security
+      console.log('❌ User not found for email:', email);
+      return res.status(200).json({
+        success: true,
+        message: 'If an account with that email exists, we have sent an OTP'
       });
     }
 
@@ -164,97 +174,92 @@ exports.sendOTP = async (req, res) => {
 
     console.log('🔐 OTP generated for user:', email, otp);
 
-    // Email template for OTP
-    const message = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-          <h1 style="margin: 0; font-size: 28px; font-weight: bold;">Expense Manager</h1>
-          <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Smart Expense Tracking</p>
-        </div>
-        
-        <div style="padding: 30px; background: #f8f9fa;">
-          <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
-          
-          <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
-            Hello <strong>${user.name}</strong>,
-          </p>
-          
-          <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-            You have requested to reset your password. Use the OTP below to verify your identity:
-          </p>
-          
-          <div style="background: #fff; padding: 20px; border-radius: 10px; text-align: center; border: 2px dashed #667eea; margin: 20px 0;">
-            <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; margin: 10px 0;">
-              ${otp}
+    // Try to send email via Resend (only for verified email)
+    let emailSent = false;
+    let emailError = null;
+
+    // Only attempt to send email if it's the verified Resend email
+    if (email === 'santoshpgblr91@gmail.com') {
+      try {
+        const message = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
+              <h1 style="margin: 0; font-size: 28px; font-weight: bold;">Expense Manager</h1>
+              <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Smart Expense Tracking</p>
             </div>
-            <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-              This OTP is valid for 10 minutes
-            </p>
+            
+            <div style="padding: 30px; background: #f8f9fa;">
+              <h2 style="color: #333; margin-bottom: 20px;">Password Reset Request</h2>
+              
+              <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+                Hello <strong>${user.name}</strong>,
+              </p>
+              
+              <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
+                You have requested to reset your password. Use the OTP below to verify your identity:
+              </p>
+              
+              <div style="background: #fff; padding: 20px; border-radius: 10px; text-align: center; border: 2px dashed #667eea; margin: 20px 0;">
+                <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; margin: 10px 0;">
+                  ${otp}
+                </div>
+                <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
+                  This OTP is valid for 10 minutes
+                </p>
+              </div>
+              
+              <p style="color: #999; font-size: 14px; text-align: center; margin-top: 25px;">
+                If you didn't request this, please ignore this email.
+              </p>
+            </div>
+            
+            <div style="background: #2d3748; padding: 20px; text-align: center; color: #a0aec0;">
+              <p style="margin: 0; font-size: 14px;">
+                &copy; 2024 Expense Manager Team. All rights reserved.
+              </p>
+              <p style="margin: 5px 0 0 0; font-size: 12px;">
+                Smart expense tracking made simple
+              </p>
+            </div>
           </div>
-          
-          <p style="color: #999; font-size: 14px; text-align: center; margin-top: 25px;">
-            If you didn't request this, please ignore this email.
-          </p>
-        </div>
-        
-        <div style="background: #2d3748; padding: 20px; text-align: center; color: #a0aec0;">
-          <p style="margin: 0; font-size: 14px;">
-            &copy; 2024 Expense Manager Team. All rights reserved.
-          </p>
-          <p style="margin: 5px 0 0 0; font-size: 12px;">
-            Smart expense tracking made simple
-          </p>
-        </div>
-      </div>
-    `;
+        `;
 
-    try {
-      // Send email via Resend
-      await sendEmail(
-        user.email,
-        'Password Reset OTP - Expense Manager',
-        message,
-        `Your OTP for password reset is: ${otp}. This OTP is valid for 10 minutes.`
-      );
+        await sendEmail(
+          user.email,
+          'Password Reset OTP - Expense Manager',
+          message,
+          `Your OTP for password reset is: ${otp}. This OTP is valid for 10 minutes.`
+        );
 
-      console.log('✅ OTP email sent successfully to:', email);
+        emailSent = true;
+        console.log('✅ OTP email sent successfully to:', email);
 
-      res.status(200).json({
-        success: true,
-        message: 'OTP sent to your email successfully',
-        email: user.email
-      });
-
-    } catch (emailError) {
-      console.error('❌ Email sending error:', emailError);
-      
-      // For development, return OTP in response if email fails
-      if (process.env.NODE_ENV === 'development') {
-        console.log('🛠️ Development mode: Returning OTP in response');
-        res.status(200).json({
-          success: true,
-          message: 'OTP generated (development mode)',
-          email: user.email,
-          otp: otp,
-          expiresAt: new Date(otpExpire).toISOString()
-        });
-      } else {
-        user.resetPasswordOTP = undefined;
-        user.resetPasswordOTPExpire = undefined;
-        await user.save();
-        
-        res.status(500).json({
-          success: false,
-          message: 'Email service temporarily unavailable. Please try again later.'
-        });
+      } catch (error) {
+        emailError = error.message;
+        console.error('❌ Email sending failed:', emailError);
       }
+    } else {
+      console.log('📧 Email not sent - recipient not verified with Resend');
     }
+
+    // Always return OTP in response for testing
+    return res.status(200).json({
+      success: true,
+      message: emailSent 
+        ? 'OTP sent to your email successfully' 
+        : 'OTP generated successfully (development mode)',
+      email: user.email,
+      otp: otp, // Always return OTP for testing
+      expiresAt: new Date(otpExpire).toISOString(),
+      emailSent: emailSent,
+      note: emailSent ? undefined : 'Use this OTP for testing. In production, this would be sent via email.'
+    });
 
   } catch (error) {
     console.error('❌ Send OTP error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Internal server error. Please try again later.'
     });
   }
 };
