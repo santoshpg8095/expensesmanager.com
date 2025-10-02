@@ -16,6 +16,122 @@ const generateOTP = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+// Register user
+exports.register = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Check if user exists
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({
+        success: false,
+        message: 'User already exists'
+      });
+    }
+
+    // Create user
+    const user = await User.create({
+      name,
+      email,
+      password,
+      authMethod: 'local'
+    });
+
+    if (user) {
+      res.status(201).json({
+        success: true,
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        authMethod: user.authMethod,
+        token: generateToken(user._id),
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Login user
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Check for user email
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+
+    // Check authentication method
+    if (user.authMethod === 'google') {
+      return res.status(401).json({
+        success: false,
+        message: 'Please login using Google authentication'
+      });
+    }
+
+    if (user && (await user.matchPassword(password))) {
+      res.json({
+        success: true,
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        authMethod: user.authMethod,
+        token: generateToken(user._id),
+      });
+    } else {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Google OAuth authentication
+exports.googleAuth = passport.authenticate('google', {
+  scope: ['profile', 'email']
+});
+
+// Google OAuth callback
+exports.googleCallback = (req, res, next) => {
+  passport.authenticate('google', { session: false }, async (err, user, info) => {
+    try {
+      if (err) {
+        console.error('Google OAuth error:', err);
+        return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
+      }
+
+      if (!user) {
+        return res.redirect(`${process.env.CLIENT_URL}/login?error=auth_failed`);
+      }
+
+      // Generate token
+      const token = generateToken(user._id);
+
+      // Redirect to frontend with token
+      res.redirect(`${process.env.CLIENT_URL}/auth/success?token=${token}`);
+    } catch (error) {
+      console.error('Google callback error:', error);
+      res.redirect(`${process.env.CLIENT_URL}/login?error=server_error`);
+    }
+  })(req, res, next);
+};
+
 // Send OTP for password reset
 exports.sendOTP = async (req, res) => {
   try {
@@ -136,6 +252,58 @@ exports.sendOTP = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Send OTP error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Verify OTP
+exports.verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    console.log('🔐 OTP verification request for:', email, 'OTP:', otp);
+
+    const user = await User.findOne({
+      email,
+      resetPasswordOTP: otp,
+      resetPasswordOTPExpire: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP'
+      });
+    }
+
+    // Generate a verification token for the next step
+    const verificationToken = crypto.randomBytes(20).toString('hex');
+
+    user.resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(verificationToken)
+      .digest('hex');
+
+    user.resetPasswordExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
+
+    // Clear OTP after successful verification
+    user.resetPasswordOTP = undefined;
+    user.resetPasswordOTPExpire = undefined;
+
+    await user.save();
+
+    console.log('✅ OTP verified successfully for:', email);
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully',
+      resetToken: verificationToken
+    });
+  } catch (error) {
+    console.error('❌ Verify OTP error:', error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -317,6 +485,21 @@ exports.updateProfile = async (req, res) => {
         message: 'User not found'
       });
     }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Logout user (optional)
+exports.logout = async (req, res) => {
+  try {
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
   } catch (error) {
     res.status(500).json({
       success: false,

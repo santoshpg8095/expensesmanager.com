@@ -10,6 +10,7 @@ const {
   sendOTP,
   verifyOTP,
   resetPassword,
+  logout
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -25,6 +26,9 @@ router.get('/google/callback', googleCallback);
 router.post('/forgot-password', sendOTP);
 router.post('/verify-otp', verifyOTP);
 router.put('/reset-password', resetPassword);
+
+// Logout route
+router.post('/logout', protect, logout);
 
 // Profile routes (protected)
 router.route('/profile')
