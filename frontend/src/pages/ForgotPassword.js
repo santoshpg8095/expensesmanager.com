@@ -7,7 +7,6 @@ import './ForgotPassword.css';
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [otpData, setOtpData] = useState(null);
 
   const navigate = useNavigate();
 
@@ -20,29 +19,15 @@ const ForgotPassword = () => {
     }
 
     setLoading(true);
-    setOtpData(null);
 
     try {
       const res = await axios.post('/auth/forgot-password', { email });
       
       if (res.data.success) {
-        // Always show OTP since we're returning it in the response
-        setOtpData({
-          otp: res.data.otp,
-          expiresAt: res.data.expiresAt,
-          emailSent: res.data.emailSent
-        });
-        
-        if (res.data.emailSent) {
-          toast.success('OTP sent to your email!');
-        } else {
-          toast.success(`OTP: ${res.data.otp} (Development Mode)`);
-        }
+        toast.success('OTP sent to your email!');
         
         // Navigate to OTP verification page with email
-        setTimeout(() => {
-          navigate('/verify-otp', { state: { email } });
-        }, 3000); // Give user time to see the OTP
+        navigate('/verify-otp', { state: { email } });
       }
     } catch (error) {
       console.error('Forgot password error:', error);
@@ -65,21 +50,6 @@ const ForgotPassword = () => {
           Enter your email address and we'll send you an OTP to reset your password.
         </p>
 
-        {otpData && (
-          <div className="otp-display">
-            <h3>🔐 Your OTP Code</h3>
-            <div className="otp-code">{otpData.otp}</div>
-            <p><strong>Expires:</strong> {new Date(otpData.expiresAt).toLocaleString()}</p>
-            <p className="otp-note">
-              {otpData.emailSent 
-                ? 'OTP has been sent to your email. Use the code above if you don\'t receive it.'
-                : 'Development Mode: Use this OTP for testing. In production, this would be sent via email.'
-              }
-            </p>
-            <p>Redirecting to OTP verification page...</p>
-          </div>
-        )}
-
         <form className="forgot-password-form" onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="email">Email Address</label>
@@ -92,16 +62,15 @@ const ForgotPassword = () => {
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={otpData} // Disable form after submission
             />
           </div>
 
           <button
             type="submit"
             className={`btn-primary ${loading ? 'loading' : ''}`}
-            disabled={loading || otpData}
+            disabled={loading}
           >
-            {loading ? 'Sending OTP...' : otpData ? 'OTP Generated' : 'Send OTP'}
+            {loading ? 'Sending OTP...' : 'Send OTP'}
           </button>
         </form>
 

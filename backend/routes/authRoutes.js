@@ -10,9 +10,7 @@ const {
   sendOTP,
   verifyOTP,
   resetPassword,
-  logout,
-  gmailAuth,
-  gmailCallback
+  logout
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -23,10 +21,6 @@ router.post('/login', login);
 // Google OAuth routes
 router.get('/google', googleAuth);
 router.get('/google/callback', googleCallback);
-
-// Gmail OAuth routes (for sending emails)
-router.get('/gmail/auth', gmailAuth);
-router.get('/gmail/callback', gmailCallback);
 
 // Password reset routes with OTP
 router.post('/forgot-password', sendOTP);
